@@ -88,10 +88,16 @@ multi.tune <- randomForest(as.factor(state) ~
                            mtry=c(1,2), importance=TRUE)
 
 multi.pred <- predict(multi.tune, test_set)
+
+#### Examine Model Performance ####
+# Ovearll accuracy 
+accuracy <- length(which(multi.pred == test_set$state)) / length(multi.pred)
+
+# relative matches 
 matches <- cor(table(test_set$state,multi.pred))
 corrplot(matches,method="square")
 
-#### MultiClass ####
+#### Performance on Northern Triangle  ####
 mutli.tune <- randomForest(as.factor(state) ~ 
                              polity + durable
                            + YouthUnemployment
