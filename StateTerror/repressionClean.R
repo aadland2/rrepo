@@ -153,6 +153,9 @@ pred <- predict(auto.arima(d), n.ahead = 5, newxreg = NULL,
 #### parameters ####
 d <- Honduras
 year <- c(2015:2019)
+
+## Constants ##
+polity <- rep(d$polity[length(d$polity)],times = length(year))
 durable <- d$durable[length(d$durable)] + c(1,2,3,4,5)
 YouthUnemployment <- predict(auto.arima(d$YouthUnemployment), n.ahead = 5, newxreg = NULL,
                           se.fit = TRUE)
@@ -169,17 +172,7 @@ CorruptionControl <- predict(auto.arima(d$CorruptionControl), n.ahead = 5, newxr
 ## World Bank seems to be imputing the data with a linear model ##
 # Generate Population
 PopModel <- lm(d$Population ~ d$year)
-Population <- (PopModel$coefficients[2] * year)
+Population <- (PopModel$coefficients[2] * year + PopModel$coefficients[1])
 # Generate GNI
 GNIModel <- lm(d$GNIPerCapita ~ d$year)
-GNIPerCapita <- (GNIModel$coefficients[2] * year) + (GNIModel$coefficients[1])
-
-
-gni <- (GNIModel$coefficients[2] * d$year)
-plot(gni,)
-g <- d$Population
-e <- c((g[14] - g[13]),(g[13] - g[12]),(g[12] - g[11]))
-
-em <- lm(ts(d$Population) ~ ts(d$year))
-predict(em,n.ahead = 5, newxreg = NULL,
-        se.fit = TRUE)
+GNIPerCapita <- (GNIModel$coefficients[2] * year + GNIModel$coefficients[1]) 
