@@ -5,7 +5,7 @@ library(MASS)
 library(caret)
 library(nnet)
 library(randomForest)
-library(dplyr)
+library(plyr)
 library(forecast)
 library(corrplot)
 
@@ -149,17 +149,20 @@ predict(arima(ElSalvador$durable,c(0,0,3)),n.ahead = 5, newxreg = NULL,
 pred <- predict(auto.arima(d), n.ahead = 5, newxreg = NULL,
                 se.fit = TRUE)
 
-ddply(triangleTest,"country",function(d){
+triangle <- sqldf("SELECt * from triangleTest where year > 2000")
+triangleTest <- ddply(triangle,~ country,function(triangle){
+  
 
     #### parameters ####
-    
+    d <- triangle
     year <- c(2015:2019)
+   
 
     ## Constants ##
     country <- rep(d$country[length(d$country)],times = length(year))
     polity <- rep(d$polity[length(d$polity)],times = length(year))
     durable <- d$durable[length(d$durable)] + c(1,2,3,4,5)
-
+   
     ## Variables ## 
     YouthUnemployment <- predict(auto.arima(d$YouthUnemployment), n.ahead = 5, newxreg = NULL,
                           se.fit = TRUE)
@@ -172,7 +175,11 @@ ddply(triangleTest,"country",function(d){
     CorruptionControl <- predict(auto.arima(d$CorruptionControl), n.ahead = 5, newxreg = NULL,
                           se.fit = TRUE)
 
-
+    #### Extract out the preds #### 
+    YouthUnemployment <- as.vector(YouthUnemployment$pred)
+    InfantMortality <- as.vector(InfantMortality $pred)
+    RuleLawEst2 <- as.vector(RuleLawEst2$pred)
+    CorruptionControl <- as.vector(CorruptionControl$pred)
     ## World Bank seems to be imputing the data with a linear model ##
     # Generate Population
     PopModel <- lm(d$Population ~ d$year)
@@ -180,5 +187,6 @@ ddply(triangleTest,"country",function(d){
     # Generate GNI
     GNIModel <- lm(d$GNIPerCapita ~ d$year)
     GNIPerCapita <- (GNIModel$coefficients[2] * year + GNIModel$coefficients[1])
-    return()
+    return(cbind(country,year,polity,durable,YouthUnemployment,
+           InfantMortality,RuleLawEst2,CorruptionControl,Population,GNIPerCapita))
 })
