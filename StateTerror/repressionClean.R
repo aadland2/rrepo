@@ -5,6 +5,8 @@ library(MASS)
 library(caret)
 library(nnet)
 library(randomForest)
+library(dplyr)
+library(forecast)
 library(corrplot)
 
 setwd("C:\\Users\\aadlandma\\Desktop\\one_sided_violence")
@@ -98,7 +100,7 @@ matches <- cor(table(test_set$state,multi.pred))
 corrplot(matches,method="square")
 
 #### Performance on Northern Triangle  ####
-mutli.tune <- randomForest(as.factor(state) ~ 
+triangle.tune <- randomForest(as.factor(state) ~ 
                              polity + durable
                            + YouthUnemployment
                            + InfantMortality + RuleLawEst2 
@@ -107,8 +109,74 @@ mutli.tune <- randomForest(as.factor(state) ~
                            data=train.batch,ntree=3000,
                            mtry=c(1,2), importance=TRUE)
 
-multi.pred <- predict(mutli.tune, triangleTest)
-triangleTest$pred <- multi.pred 
+triangle.pred <- predict(triangle.tune, triangleTest)
+triangleTest$pred <- triangle.pred 
 table(triangleTest$state,triangleTest$pred)
 
-best <- triangleTest
+#### Metrics ####
+# Exact matches 
+triangle.accuracy <- (length(which(triangle.pred  == triangleTest$state)) 
+        / length(triangle.pred))
+
+# relative matches 
+triangle.matches <- cor(table(triangleTest$state,triangle.pred))
+corrplot(triangle.matches,method="square")
+
+
+#### Seperate out the three counties #### 
+Honduras <- sqldf("SELECT * FROM triangleTest WHERE country = 'Honduras'
+                  AND year > 1998")
+
+ElSalvador <- sqldf("SELECT * FROM triangleTest WHERE country = 'El Salvador'
+                  AND year > 1998")
+
+Guatemala <- sqldf("SELECT * FROM triangleTest WHERE country = 'Guatemala'
+                  AND year > 1998")
+
+#### Build a function to forecast the values three years out ####
+c <- Honduras$YouthUnemployment[0:13]
+d <- Honduras$durable[0:13]
+arima(c,c(0, 0,3))
+
+pred <- predict(arima(c,c(0, 0,3)), n.ahead = 5, newxreg = NULL,
+        se.fit = TRUE)
+
+plot(pred$pred)
+
+predict(arima(ElSalvador$durable,c(0,0,3)),n.ahead = 5, newxreg = NULL,
+        se.fit = TRUE)
+
+pred <- predict(auto.arima(d), n.ahead = 5, newxreg = NULL,
+                se.fit = TRUE)
+
+
+#### parameters ####
+d <- Honduras
+year <- c(2015:2019)
+durable <- d$durable[length(d$durable)] + c(1,2,3,4,5)
+YouthUnemployment <- predict(auto.arima(d$YouthUnemployment), n.ahead = 5, newxreg = NULL,
+                          se.fit = TRUE)
+InfantMortality <- predict(auto.arima(d$InfantMortality), n.ahead = 5, newxreg = NULL,
+                        se.fit = TRUE)
+
+RuleLawEst2 <- predict(auto.arima(d$RuleLawEst2), n.ahead = 5, newxreg = NULL,
+                          se.fit = TRUE)
+
+CorruptionControl <- predict(auto.arima(d$CorruptionControl), n.ahead = 5, newxreg = NULL,
+                          se.fit = TRUE)
+
+
+## World Bank seems to be imputing the data with a linear model ##
+# get model coefficients impute them for 2015:2019
+PopModel <- lm(d$Population ~ d$year)
+Population <- (PopModel$coefficients[2] * year)
+GNIModel <- lm(d$GNIPerCapita ~ d$year)
+
+g <- d$Population
+
+g <- d$Population
+e <- c((g[14] - g[13]),(g[13] - g[12]),(g[12] - g[11]))
+
+em <- lm(ts(d$Population) ~ ts(d$year))
+predict(em,n.ahead = 5, newxreg = NULL,
+        se.fit = TRUE)
