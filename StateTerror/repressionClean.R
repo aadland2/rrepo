@@ -167,13 +167,16 @@ CorruptionControl <- predict(auto.arima(d$CorruptionControl), n.ahead = 5, newxr
 
 
 ## World Bank seems to be imputing the data with a linear model ##
-# get model coefficients impute them for 2015:2019
+# Generate Population
 PopModel <- lm(d$Population ~ d$year)
 Population <- (PopModel$coefficients[2] * year)
+# Generate GNI
 GNIModel <- lm(d$GNIPerCapita ~ d$year)
+GNIPerCapita <- (GNIModel$coefficients[2] * year) + (GNIModel$coefficients[1])
 
-g <- d$Population
 
+gni <- (GNIModel$coefficients[2] * d$year)
+plot(gni,)
 g <- d$Population
 e <- c((g[14] - g[13]),(g[13] - g[12]),(g[12] - g[11]))
 
