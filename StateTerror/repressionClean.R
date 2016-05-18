@@ -59,10 +59,28 @@ dfShortComplete <- dfShort[which(complete.cases(dfShort)),]
 triangleTest <- sqldf("SELECT * FROM dfShortComplete WHERE country = 'Honduras'
                       OR country = 'El Salvador' or country = 'Guatemala'")
 
-train.batch <- dfShortComplete[-which(dfShortComplete$country == "Honduras"|
+
+triangleTest <- sqldf("SELECT country,year,Binary,state,
+                      polity,durable,YouthUnemployment,
+                      InfantMortality,RuleLawEst2,
+                      CorruptionControl,Population,
+                      GNIPerCapita from dfShortComplete
+                      WHERE country = 'Honduras'
+                      OR country = 'El Salvador' or country = 'Guatemala'")
+
+train_batch <- dfShortComplete[-which(dfShortComplete$country == "Honduras"|
                                     dfShortComplete$country == "El Salvador" |
                                     dfShortComplete$country == 'Guatemala'),]
 
+
+train.batch <- sqldf("SELECT country,year,Binary,state,
+                      polity,durable,YouthUnemployment,
+                      InfantMortality,RuleLawEst2,
+                      CorruptionControl,Population,
+                      GNIPerCapita from train_batch")
+
+train.batch$durable <- as.numeric(as.character(train.batch$durable))
+triangleTest$durable <- as.numeric(as.character(triangleTest$durable))
 
 rf.tune <- train(as.factor(Binary) ~ as.factor(polity) + durable + YouthUnemployment
                  + InfantMortality + RuleLawEst2 + CorruptionControl,
@@ -86,7 +104,7 @@ multi.tune <- randomForest(as.factor(state) ~
                            + InfantMortality + RuleLawEst2 
                            + CorruptionControl + CorruptionControl
                            + Population + GNIPerCapita,
-                           data=train_set,ntree=3000,
+                           data=train_set,ntree=1000,
                            mtry=c(1,2), importance=TRUE)
 
 multi.pred <- predict(multi.tune, test_set)
@@ -104,7 +122,7 @@ triangle.tune <- randomForest(as.factor(state) ~
                              polity + durable
                            + YouthUnemployment
                            + InfantMortality + RuleLawEst2 
-                           + CorruptionControl + CorruptionControl
+                           + CorruptionControl 
                            + Population + GNIPerCapita,
                            data=train.batch,ntree=3000,
                            mtry=c(1,2), importance=TRUE)
@@ -122,64 +140,31 @@ triangle.accuracy <- (length(which(triangle.pred  == triangleTest$state))
 triangle.matches <- cor(table(triangleTest$state,triangle.pred))
 corrplot(triangle.matches,method="square")
 
-
-#### Seperate out the three counties #### 
-Honduras <- sqldf("SELECT * FROM triangleTest WHERE country = 'Honduras'
-                  AND year > 1998")
-
-ElSalvador <- sqldf("SELECT * FROM triangleTest WHERE country = 'El Salvador'
-                  AND year > 1998")
-
-Guatemala <- sqldf("SELECT * FROM triangleTest WHERE country = 'Guatemala'
-                  AND year > 1998")
-
 #### Build a function to forecast the values three years out ####
-c <- Honduras$YouthUnemployment[0:13]
-d <- Honduras$durable[0:13]
-arima(c,c(0, 0,3))
+triangle <- sqldf("SELECT * from triangleTest where year > 2000 and year < 2014")
 
-pred <- predict(arima(c,c(0, 0,3)), n.ahead = 5, newxreg = NULL,
-        se.fit = TRUE)
-
-plot(pred$pred)
-
-predict(arima(ElSalvador$durable,c(0,0,3)),n.ahead = 5, newxreg = NULL,
-        se.fit = TRUE)
-
-pred <- predict(auto.arima(d), n.ahead = 5, newxreg = NULL,
-                se.fit = TRUE)
-
-triangle <- sqldf("SELECt * from triangleTest where year > 2000")
-triangleTest <- ddply(triangle,~ country,function(triangle){
-  
-
+triangleFuture <- ddply(triangle,~ country,function(d){
     #### parameters ####
-    d <- triangle
-    year <- c(2015:2019)
+    year <- c(2014:2018)
    
-
     ## Constants ##
     country <- rep(d$country[length(d$country)],times = length(year))
     polity <- rep(d$polity[length(d$polity)],times = length(year))
     durable <- d$durable[length(d$durable)] + c(1,2,3,4,5)
-   
-    ## Variables ## 
-    YouthUnemployment <- predict(auto.arima(d$YouthUnemployment), n.ahead = 5, newxreg = NULL,
-                          se.fit = TRUE)
-    InfantMortality <- predict(auto.arima(d$InfantMortality), n.ahead = 5, newxreg = NULL,
-                        se.fit = TRUE)
-
-    RuleLawEst2 <- predict(auto.arima(d$RuleLawEst2), n.ahead = 5, newxreg = NULL,
-                          se.fit = TRUE)
-
-    CorruptionControl <- predict(auto.arima(d$CorruptionControl), n.ahead = 5, newxreg = NULL,
-                          se.fit = TRUE)
+    
+    ## Linear Models ## 
+    YouthUnemploymentModel <- lm(d$YouthUnemployment ~ d$year)
+    InfantMortalityModel <- lm(d$InfantMortality ~ d$year)
+    RuleLawEst2Model <- lm(d$RuleLawEst2 ~ d$year)
+    CorruptionControModel <- lm(d$CorruptionControl ~ d$year)
+    
 
     #### Extract out the preds #### 
-    YouthUnemployment <- as.vector(YouthUnemployment$pred)
-    InfantMortality <- as.vector(InfantMortality $pred)
-    RuleLawEst2 <- as.vector(RuleLawEst2$pred)
-    CorruptionControl <- as.vector(CorruptionControl$pred)
+    YouthUnemployment <- (YouthUnemploymentModel$coefficients[2] * year + YouthUnemploymentModel$coefficients[1])
+    InfantMortality <- (InfantMortalityModel$coefficients[2] * year + InfantMortalityModel$coefficients[1])
+    RuleLawEst2 <-(RuleLawEst2Model$coefficients[2] * year + RuleLawEst2Model$coefficients[1])
+    CorruptionControl <- (CorruptionControModel$coefficients[2] * year + CorruptionControModel$coefficients[1])
+    
     ## World Bank seems to be imputing the data with a linear model ##
     # Generate Population
     PopModel <- lm(d$Population ~ d$year)
@@ -187,6 +172,116 @@ triangleTest <- ddply(triangle,~ country,function(triangle){
     # Generate GNI
     GNIModel <- lm(d$GNIPerCapita ~ d$year)
     GNIPerCapita <- (GNIModel$coefficients[2] * year + GNIModel$coefficients[1])
-    return(cbind(country,year,polity,durable,YouthUnemployment,
-           InfantMortality,RuleLawEst2,CorruptionControl,Population,GNIPerCapita))
+    df <- as.data.frame((cbind(country,year,polity,durable,YouthUnemployment,
+                 InfantMortality,RuleLawEst2,CorruptionControl,Population,GNIPerCapita)))
+    
+    return(df)
 })
+
+# define a function to convert factors 
+converter <- function(d){
+  d$durable <- as.numeric(as.character(d$durable))
+  d$polity <- as.numeric(as.character(d$polity))
+  d$YouthUnemployment <- as.numeric(as.character(d$YouthUnemployment))
+  d$InfantMortality <- as.numeric(as.character(d$InfantMortality))
+  d$RuleLawEst2 <- as.numeric(as.character(d$RuleLawEst2))
+  d$CorruptionControl <- as.numeric(as.character(d$CorruptionControl))
+  d$Population <- as.numeric(as.character(d$Population))
+  d$GNIPerCapita <- as.numeric(as.character(d$GNIPerCapita))
+  return(d)
+}
+d <- converter(triangleFuture)
+
+#### Validate for the Triangle Forecast 
+triangleFuturePred <- predict(triangle.tune, d)
+triangleFuture$forecast <- as.numeric(as.character(triangleFuturePred))
+triangle2014 <- sqldf("SELECT * FROM triangleTest where year = 2014 ORDER BY country ASC")
+triangleFuture2014 <- sqldf("SELECT * FROM triangleFuture where year = 2014")
+table(triangle2014$state,triangleFuture2014$forecast)
+
+#### Create a sepearte forecast just on the future variable ####
+futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 2014
+                     AND country in ("Albania","Algeria","Argentina","Armenia", 
+"Australia","Austria","Azerbaijan","Bahrain", 
+"Bangladesh","Belarus","Belgium","Benin", 
+                     "Bhutan", "Bolivia","Bosnia", "Botswana",
+                     "Brazil", "Bulgaria", "Burkina Faso","Burundi", 
+                     "Cambodia", "Cameroon", "Canada", "Cape Verde",
+                     "Central African Republic","Chad",   "Chile",  "China", 
+                     "Colombia", "Comoros","Congo Brazzaville", "Congo Kinshasa",   
+                     "Costa Rica","Croatia","Cyprus", "Czech Republic",   
+                     "Denmark","Dominican Republic","East Timor","Ecuador","Egypt",  "Equatorial Guinea", "Estonia","Fiji",  
+                     "Finland","France", "Gabon",  "Gambia",
+                     "Georgia","Germany","Ghana",  "Greece",
+                     "Guinea", "Guinea-Bissau", "Guyana", "Hungary", 
+                     "India",  "Indonesia","Iran",   "Ireland", 
+                     "Israel", "Italy",  "Ivory Coast","Jamaica", 
+                     "Japan",  "Jordan", "Kazakhstan","Kenya", 
+                     "Korea South","Kuwait", "Kyrgyzstan","Laos",  
+                     "Latvia", "Lebanon","Lesotho","Liberia", 
+                     "Libya",  "Lithuania","Luxembourg","Macedonia",
+                     "Madagascar","Malawi", "Malaysia", "Mali",  
+                     "Mauritania","Mauritius","Mexico", "Moldova", 
+                     "Mongolia", "Morocco","Mozambique","Namibia", 
+                     "Nepal",  "Netherlands","New Zealand","Nicaragua",
+                     "Niger",  "Nigeria","Norway", "Oman",  
+                     "Pakistan", "Panama", "Papua New Guinea",  "Paraguay",
+                     "Peru",   "Philippines","Poland", "Portugal",
+                     "Romania","Russia", "Rwanda", "Saudi Arabia", 
+                     "Senegal","Sierra Leone","Singapore","Slovak Republic",  
+                     "Slovenia", "Solomon Islands",   "South Africa","Spain", 
+                     "Sri Lanka","Suriname", "Swaziland","Sweden",
+                     "Switzerland","Tajikistan","Tanzania", "Thailand",
+                     "Togo", "Trinidad and Tobago","Tunisia","Turkey",
+                     "Turkmenistan","UAE","Uganda", "Ukraine", 
+                     "United Kingdom","Uruguay","Uzbekistan","Yemen", 
+                     "Zambia")')
+futureFrame <- ddply(futureFrame,~ country,function(d){
+  #### parameters ####
+  year <- c(2014:2018)
+  
+  ## Constants ##
+  country <- rep(d$country[length(d$country)],times = length(year))
+  polity <- rep(d$polity[length(d$polity)],times = length(year))
+  durable <- d$durable[length(d$durable)] + c(1,2,3,4,5)
+  
+  ## Linear Models ## 
+  YouthUnemploymentModel <- lm(d$YouthUnemployment ~ d$year)
+  InfantMortalityModel <- lm(d$InfantMortality ~ d$year)
+  RuleLawEst2Model <- lm(d$RuleLawEst2 ~ d$year)
+  CorruptionControModel <- lm(d$CorruptionControl ~ d$year)
+  
+  
+  #### Extract out the preds #### 
+  YouthUnemployment <- (YouthUnemploymentModel$coefficients[2] * year + YouthUnemploymentModel$coefficients[1])
+  InfantMortality <- (InfantMortalityModel$coefficients[2] * year + InfantMortalityModel$coefficients[1])
+  RuleLawEst2 <-(RuleLawEst2Model$coefficients[2] * year + RuleLawEst2Model$coefficients[1])
+  CorruptionControl <- (CorruptionControModel$coefficients[2] * year + CorruptionControModel$coefficients[1])
+  
+  ## World Bank seems to be imputing the data with a linear model ##
+  # Generate Population
+  PopModel <- lm(d$Population ~ d$year)
+  Population <- (PopModel$coefficients[2] * year + PopModel$coefficients[1])
+  # Generate GNI
+  GNIModel <- lm(d$GNIPerCapita ~ d$year)
+  GNIPerCapita <- (GNIModel$coefficients[2] * year + GNIModel$coefficients[1])
+  df <- as.data.frame((cbind(country,year,polity,durable,YouthUnemployment,
+                             InfantMortality,RuleLawEst2,CorruptionControl,Population,GNIPerCapita)))
+  
+  return(df)
+})
+
+#### Predict on the Future Data
+futurFrame <- converter(futureFrame)
+futureFrameComplete <- futureFrame[which(complete.cases(futureFrame)),]
+d <- converter(futureFrameComplete)
+futureFrameComplete$pred <- predict(triangle.tune, d)
+
+evaluate2014 <- sqldf("SELECT train_batch.country,train_batch.year,futureFrameComplete.pred,
+                      train_batch.state
+                      FROM futureFrameComplete
+                      JOIN train_batch
+                      ON futureFrameComplete.year = train_batch.year
+                      AND futureFrameComplete.country = train_batch.country")
+
+table(evaluate2014$pred,evaluate2014$state)
