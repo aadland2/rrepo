@@ -308,3 +308,5 @@ accuracy <- length(which(multi.pred == test_set$state)) / length(multi.pred)
 (table(test_set$state,multi.pred))
 matches <- cor(table(test_set$state,multi.pred))
 corrplot(matches,method="square")
+
+#### Northern Triangle Evaluation #### 
