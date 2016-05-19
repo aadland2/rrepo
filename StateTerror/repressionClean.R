@@ -200,7 +200,7 @@ triangleFuture2014 <- sqldf("SELECT * FROM triangleFuture where year = 2014")
 table(triangle2014$state,triangleFuture2014$forecast)
 
 #### Create a sepearte forecast just on the future variable ####
-futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 2014
+futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 2009
                      AND country in ("Albania","Algeria","Argentina","Armenia", 
 "Australia","Austria","Azerbaijan","Bahrain", 
 "Bangladesh","Belarus","Belgium","Benin", 
@@ -238,7 +238,7 @@ futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 201
                      "Zambia")')
 futureFrame <- ddply(futureFrame,~ country,function(d){
   #### parameters ####
-  year <- c(2014:2018)
+  year <- c(2009:2014)
   
   ## Constants ##
   country <- rep(d$country[length(d$country)],times = length(year))
@@ -277,11 +277,34 @@ futureFrameComplete <- futureFrame[which(complete.cases(futureFrame)),]
 d <- converter(futureFrameComplete)
 futureFrameComplete$pred <- predict(triangle.tune, d)
 
-evaluate2014 <- sqldf("SELECT train_batch.country,train_batch.year,futureFrameComplete.pred,
+evaluateImputed <- sqldf("SELECT train_batch.country,train_batch.year,futureFrameComplete.pred,
                       train_batch.state
                       FROM futureFrameComplete
                       JOIN train_batch
                       ON futureFrameComplete.year = train_batch.year
                       AND futureFrameComplete.country = train_batch.country")
 
-table(evaluate2014$pred,evaluate2014$state)
+table(evaluateImputed$pred,evaluateImputed$state)
+overallAccuracy <- length(which(evaluateImputed$pred == evaluateImputed$state)) / length(evaluateImputed$pred)
+relativeAccuracy <- table(evaluateImputed$pred,evaluateImputed$state)
+corrplot(matches,method="square")
+
+
+
+#### Model Evaluation Move Later #### 
+# Chart for distributions of data
+length(unique(train.batch$country)) # number of countries 
+barchart(table(train.batch$state),xlab="Country Years",ylab="PTS Score",main="PTS Distribution: Training")
+
+# Test Set
+barchart(table(test_set$state),xlab="Country Years",ylab="PTS Score",main="PTS Distribution: Test")
+length(unique(test_set$country))
+
+# Accuracy measurements
+# Ovearll accuracy 
+accuracy <- length(which(multi.pred == test_set$state)) / length(multi.pred)
+
+# relative matches 
+(table(test_set$state,multi.pred))
+matches <- cor(table(test_set$state,multi.pred))
+corrplot(matches,method="square")
