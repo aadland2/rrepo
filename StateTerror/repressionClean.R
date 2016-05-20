@@ -200,7 +200,7 @@ triangleFuture2014 <- sqldf("SELECT * FROM triangleFuture where year = 2014")
 table(triangle2014$state,triangleFuture2014$forecast)
 
 #### Create a sepearte forecast just on the future variable ####
-futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 2009
+futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 2010
                      AND country in ("Albania","Algeria","Argentina","Armenia", 
 "Australia","Austria","Azerbaijan","Bahrain", 
 "Bangladesh","Belarus","Belgium","Benin", 
@@ -238,7 +238,7 @@ futureFrame <- sqldf('SELECT * from train_batch where year > 2000 and year < 200
                      "Zambia")')
 futureFrame <- ddply(futureFrame,~ country,function(d){
   #### parameters ####
-  year <- c(2009:2014)
+  year <- c(2010:2014)
   
   ## Constants ##
   country <- rep(d$country[length(d$country)],times = length(year))
@@ -277,19 +277,20 @@ futureFrameComplete <- futureFrame[which(complete.cases(futureFrame)),]
 d <- converter(futureFrameComplete)
 futureFrameComplete$pred <- predict(triangle.tune, d)
 
-evaluateImputed <- sqldf("SELECT train_batch.country,train_batch.year,futureFrameComplete.pred,
-                      train_batch.state
+evaluateImputed <- sqldf("SELECT dfShortComplete.country,dfShortComplete.year,futureFrameComplete.pred,
+                      dfShortComplete.state
                       FROM futureFrameComplete
-                      JOIN train_batch
-                      ON futureFrameComplete.year = train_batch.year
-                      AND futureFrameComplete.country = train_batch.country")
+                      JOIN dfShortComplete
+                      ON futureFrameComplete.year = dfShortComplete.year
+                      AND futureFrameComplete.country = dfShortComplete.country")
 
 table(evaluateImputed$pred,evaluateImputed$state)
 overallAccuracy <- length(which(evaluateImputed$pred == evaluateImputed$state)) / length(evaluateImputed$pred)
-relativeAccuracy <- table(evaluateImputed$pred,evaluateImputed$state)
-corrplot(matches,method="square")
-
-
+relativeAccuracy <- cor(table(evaluateImputed$pred,evaluateImputed$state))
+corrplot(relativeAccuracy ,method="square")
+e2010 <- sqldf("SELECT state,pred from evaluateImputed WHERE year = 2010")
+table(e2010)
+120 / length(e2010$pred)
 
 #### Model Evaluation Move Later #### 
 # Chart for distributions of data
@@ -310,3 +311,118 @@ matches <- cor(table(test_set$state,multi.pred))
 corrplot(matches,method="square")
 
 #### Northern Triangle Evaluation #### 
+barchart(table(triangleTest$state),xlab="Country Years",ylab="PTS Score",
+        main="PTS Distribution: Northern Triangle")
+
+# Table 
+# Exact matches 
+triangleAccuracy <- (length(which(triangle.pred  == triangleTest$state)) 
+                      / length(triangle.pred))
+
+# relative matches 
+triangleMatches <- cor(table(triangleTest$state,triangle.pred))
+corrplot(triangleMatches,method="square")
+
+
+#### Evaluation Metrics for future Predictions ####
+head(dfShortComplete)
+e <- dfShortComplete 
+populationModel <- lm(e$Population ~ e$country + e$year)
+
+honduras <- sqldf("SELECT * FROM e WHERE country = 'Honduras'")
+
+e$countryHonduras                  -18978178    3450194  -5.501 4.21e-08 ***
+
+hondo <- c(honduras$year * 494227 + -18978178)
+
+hMort <- lm(honduras$InfantMortality ~ honduras$year)
+hpop <- lm(e$Population ~ e$year)
+
+
+
+
+
+zeta <- sqldf('SELECT * from train_batch where year > 2000 and year < 2015
+                     AND country in ("Albania","Algeria","Argentina","Armenia", 
+"Australia","Austria","Azerbaijan","Bahrain", 
+                     "Bangladesh","Belarus","Belgium","Benin", 
+                     "Bhutan", "Bolivia","Bosnia", "Botswana",
+                     "Brazil", "Bulgaria", "Burkina Faso","Burundi", 
+                     "Cambodia", "Cameroon", "Canada", "Cape Verde",
+                     "Central African Republic","Chad",   "Chile",  "China", 
+                     "Colombia", "Comoros","Congo Brazzaville", "Congo Kinshasa",   
+                     "Costa Rica","Croatia","Cyprus", "Czech Republic",   
+                     "Denmark","Dominican Republic","East Timor","Ecuador","Egypt",  "Equatorial Guinea", "Estonia","Fiji",  
+                     "Finland","France", "Gabon",  "Gambia",
+                     "Georgia","Germany","Ghana",  "Greece",
+                     "Guinea", "Guinea-Bissau", "Guyana", "Hungary", 
+                     "India",  "Indonesia","Iran",   "Ireland", 
+                     "Israel", "Italy",  "Ivory Coast","Jamaica", 
+                     "Japan",  "Jordan", "Kazakhstan","Kenya", 
+                     "Korea South","Kuwait", "Kyrgyzstan","Laos",  
+                     "Latvia", "Lebanon","Lesotho","Liberia", 
+                     "Libya",  "Lithuania","Luxembourg","Macedonia",
+                     "Madagascar","Malawi", "Malaysia", "Mali",  
+                     "Mauritania","Mauritius","Mexico", "Moldova", 
+                     "Mongolia", "Morocco","Mozambique","Namibia", 
+                     "Nepal",  "Netherlands","New Zealand","Nicaragua",
+                     "Niger",  "Nigeria","Norway", "Oman",  
+                     "Pakistan", "Panama", "Papua New Guinea",  "Paraguay",
+                     "Peru",   "Philippines","Poland", "Portugal",
+                     "Romania","Russia", "Rwanda", "Saudi Arabia", 
+                     "Senegal","Sierra Leone","Singapore","Slovak Republic",  
+                     "Slovenia", "Solomon Islands",   "South Africa","Spain", 
+                     "Sri Lanka","Suriname", "Swaziland","Sweden",
+                     "Switzerland","Tajikistan","Tanzania", "Thailand",
+                     "Togo", "Trinidad and Tobago","Tunisia","Turkey",
+                     "Turkmenistan","UAE","Uganda", "Ukraine", 
+                     "United Kingdom","Uruguay","Uzbekistan","Yemen", 
+                     "Zambia")')
+
+rsquaredFrame <- ddply(zeta,~ country,function(d){
+  #### parameters ####
+  country <- d$country
+  
+  ## Linear Models ## 
+  employment <- lm(d$YouthUnemployment ~ d$year)
+  mortality <- lm(d$InfantMortality ~ d$year)
+  rule <- lm(d$RuleLawEst2 ~ d$year)
+  corrupt <- lm(d$CorruptionControl ~ d$year)
+  pop <- lm(d$Population ~ d$year)
+  gni <- lm(d$GNIPerCapita ~ d$year)
+  
+  e <- summary(employment)[8]$r.squared
+  m <- summary(mortality)[8]$r.squared
+  r <- summary(rule)[8]$r.squared
+  c <- summary(corrupt)[8]$r.squared
+  p <- summary(pop)[8]$r.squared
+  g <- summary(gni)[8]$r.squared
+  
+  df <- as.data.frame(cbind(country,
+        as.numeric(as.character(e)),
+        as.numeric(as.character(m)),
+        as.numeric(as.character(r)),
+        as.numeric(as.character(p)),
+        as.numeric(as.character(c)),
+        as.numeric(as.character(g))))
+  return(df)
+})
+
+
+mucho <- sqldf("SELECT * FROM rsquaredFrame GROUP BY country")
+
+efta <- sqldf("SELECT avg(m) from mucho")
+as.numeric(as.character(mucho$e))
+as.numeric(as.character(mucho$m))
+as.numeric(as.character(mucho$r))
+as.numeric(as.character(mucho$p))
+as.numeric(as.character(mucho$c))
+as.numeric(as.character(mucho$g))
+
+
+oofta <- sqldf("SELECT * FROM zeta WHERE year > 2008")
+twenty8 <- table(oofta$state)
+barchart(twenty8,ylab="PTS Score",xlab="Country Years",main="PTS Distribution: Imputed Test")
+
+
+e2010 <- sqldf("SELECT state,pred from futureFrame where year = 2010")
